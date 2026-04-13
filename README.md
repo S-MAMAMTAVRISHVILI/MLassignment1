@@ -252,6 +252,11 @@ with mlflow.start_run(run_name="manual_feature_drop_ridge"):
     mlflow.log_param("alpha", 0.1)
     mlflow.log_metric("rmse", rmse_manual)
 ```
+### მიდგომა 3: Lasso-ზე დაფუძნებული შერჩევა
+
+Lasso რეგრესია L1 რეგულარიზაციის გამო ავტომატურად ანულებს სუსტი მახასიათებლების კოეფიციენტებს. alpha=0.001-ით დავატრენინგე ლასო და ავირჩიე მხოლოდ არანულოვანი სვეტები.
+
+შედეგი: შეირჩა 80 მახასიათებელი 263-დან. შემდეგ Ridge(alpha=10) დავატრენინგეთ შერჩეულ სვეტებზე.
 
 ### Outlier მოშორება (feature selection-ის ნაწილი)
 
@@ -540,6 +545,41 @@ with mlflow.start_run(run_name="kfold_cv_ridge_manual"):
     mlflow.log_metric("cv_mean_rmse", np.mean(rmse_folds))
     mlflow.log_metric("cv_std_rmse", np.std(rmse_folds))
 ```
+### Overfitting / Underfitting ანალიზი
+
+თითოეული მოდელისთვის შევადარეთ Train და Validation RMSE:
+
+| მოდელი | Train RMSE | Val RMSE | Gap | სტატუსი |
+|---|---|---|---|---|   
+| LinearRegression | 0.15237 | 0.16750 | +0.01513 | UNDERFIT |
+| Ridge_alpha_10 | 0.19602 | 0.20779 | +0.01177 | UNDERFIT |
+| Ridge_manual_drop | 0.13830 | 0.16538 | +0.02708 | OVERFIT |
+| GradientBoosting | 0.06553 | 0.06897 | +0.00344 | OK |
+| XGBoost | 0.03354 | 0.03387 | +0.00033 | OK |
+| RandomForest | 0.05151 | 0.05060 | -0.00091 | OK |
+
+**LinearRegression — UNDERFIT:**
+რეგულარიზაციის გარეშე, მაღალგანზომილებიან მონაცემებზე (200+ სვეტი) მოდელი ვერ პოულობს
+სტაბილურ პარამეტრებს. Val RMSE=0.167 — ზღვარს (0.16) ზემოთ.
+
+**Ridge_alpha_10 — UNDERFIT:**
+alpha=10 ძალიან ძლიერი რეგულარიზაციაა ამ feature set-ისთვის (ordinal mapping-ის გარეშე).
+მოდელი ზედმეტად "ამარტივებს" და კარგავს პატერნებს — Train RMSE=0.196.
+
+**Ridge_manual_drop — OVERFIT:**
+alpha=0.1 მინიმალური რეგულარიზაციაა. gap=0.027 ზღვარს (0.02) სცდება — მოდელი
+სატრენინგო მონაცემებს უკეთ "ერგება", ვიდრე ზოგადს. სწორედ ამის გამო
+K-Fold-ში Fold 3-ზე მივიღეთ RMSE=0.227.
+
+**GradientBoosting / XGBoost / RandomForest — OK:**
+ხის მოდელები interaction features-ზე დატრენინგდა. Train და Val RMSE პრაქტიკულად იდენტურია, ანუ გვაქვს კარგი განზოგადება. 
+თუმცა გასათვალისწინებელია, რომ ეს მოდელები დამატებითი hyperparameter ოპტიმიზაციის გარეშეა და Kaggle-ზე
+შედეგი შეიძლება განსხვავდებოდეს.
+
+**საბოლოო არჩევანი — Ridge(alpha=10) + outlier removal + K-Fold:**
+სუფთა feature set-ზე (ordinal mapping + manual drop) და alpha=10-ით K-Fold Mean RMSE=0.12505,
+Std=0.00924 — ყველაზე სტაბილური და განზოგადებადი მოდელი.
+
 
 ### საბოლოო მოდელის შერჩევა და შენახვა
 
@@ -612,6 +652,8 @@ import mlflow
 `random_forest_v1` RandomForestRegressor, n_est=400, depth=None, tracked
 `kfold_cv_ridge_manual` Ridge, alpha=10, 5-fold CV, cv_mean=0.12505, cv_std=0.00924
 `ridge_manual_drop_final` Ridge, alpha=10, full data, cv_mean_rmse=0.12505
+`lasso_feature_selection` Lasso alpha=0.001, 80 features selected from 263, Ridge RMSE logged
+`overfit_underfit_analysis` train/val RMSE gap per model, status logged per model
 
 ### საუკეთესო მოდელის შედეგები
 
